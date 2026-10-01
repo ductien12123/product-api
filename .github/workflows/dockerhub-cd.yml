@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       - name: Checkout code
@@ -30,3 +30,13 @@ jobs:
         run: |
           docker pull ductien12123/product-api:latest
           docker image inspect ductien12123/product-api:latest
+
+      - name: Deploy to local Docker Engine
+        run: |
+          docker compose -f docker-compose-prod.yaml pull product-api
+          docker compose -f docker-compose-prod.yaml up -d --force-recreate
+          docker compose -f docker-compose-prod.yaml ps
+
+      - name: Verify Product API
+        run: |
+          curl.exe -fsS http://localhost:3000/
