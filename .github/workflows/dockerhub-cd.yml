@@ -39,4 +39,18 @@ jobs:
 
       - name: Verify Product API
         run: |
-          curl -fsS http://localhost:3000/
+          for i in {1..30}; do
+            echo "Checking Product API... attempt $i"
+
+            if curl -fsS http://localhost:3000/ > /dev/null 2>&1; then
+              echo "Product API is ready"
+              exit 0
+            fi
+
+            docker compose -f docker-compose-prod.yaml ps
+            sleep 2
+          done
+
+          echo "Product API failed to start"
+          docker compose -f docker-compose-prod.yaml logs product-api
+          exit 1
