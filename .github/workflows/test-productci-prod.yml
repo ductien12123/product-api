@@ -17,10 +17,10 @@
           uses: actions/checkout@v4
 
         - name: Start MongoDB and Product API
-          run: docker compose -f docker-compose-prod.yaml up -d --build
+          run: docker compose -f docker-compose-prod.yaml up -d
 
         - name: Check containers
-          run: docker compose ps
+          run: docker compose -f docker-compose-prod.yaml ps
 
         - name: Wait for MongoDB healthcheck
           run: |
@@ -41,23 +41,27 @@
 
             if [ "$STATUS" != "healthy" ]; then
               echo "MongoDB healthcheck failed"
-              docker compose logs mongodb
+              docker compose -f docker-compose-prod.yaml logs mongodb
               exit 1
             fi
 
         - name: Wait for Product API
           run: |
             for i in {1..30}; do
-              if curl -fsS http://localhost:3000/ > /dev/null; then
+              echo "Checking Product API... attempt $i"
+
+              if curl -fsS http://localhost:3000/ > /dev/null 2>&1; then
                 echo "Product API is ready"
-                break
+                exit 0
               fi
 
-              echo "Waiting for Product API..."
+              docker compose -f docker-compose-prod.yaml ps
               sleep 2
             done
 
-            curl -fsS http://localhost:3000/
+            echo "Product API failed to start"
+            docker compose -f docker-compose-prod.yaml logs product-api
+            exit 1
 
         - name: CREATE product
           run: |
@@ -92,8 +96,8 @@
 
         - name: Show logs on failure
           if: failure()
-          run: docker compose logs
+          run: docker compose -f docker-compose-prod.yaml logs
 
         - name: Stop containers
           if: always()
-          run: docker compose down -v
+          run: docker compose -f docker-compose-prod.yaml down -v
