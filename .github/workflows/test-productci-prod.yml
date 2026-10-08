@@ -1,103 +1,135 @@
-  name: Product API Production CI
+name: Product API Production CI
 
-  on:
-    push:
-      branches:
-        - main
-    pull_request:
-      branches:
-        - main
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
-  jobs:
-    test-production:
-      runs-on: ubuntu-latest
+jobs:
+  test-production:
+    runs-on: ubuntu-latest
 
-      steps:
-        - name: Checkout code
-          uses: actions/checkout@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-        - name: Start MongoDB and Product API
-          run: docker compose -f docker-compose-prod.yaml up -d
+      - name: Start MongoDB and Product API
+        run: docker compose -f docker-compose-prod.yaml up -d
 
-        - name: Check containers
-          run: docker compose -f docker-compose-prod.yaml ps
+      - name: Check containers
+        run: docker compose -f docker-compose-prod.yaml ps
 
-        - name: Wait for MongoDB healthcheck
-          run: |
-            for i in {1..30}; do
-              STATUS=$(docker inspect --format='{{.State.Health.Status}}' namongodb-prod 2>/dev/null || true)
+      - name: Wait for MongoDB healthcheck
+        run: |
+          for i in {1..30}; do
+            STATUS=$(docker inspect --format='{{.State.Health.Status}}' namongodb-prod 2>/dev/null || true)
 
-              echo "MongoDB status: $STATUS"
+            echo "MongoDB status: $STATUS"
 
-              if [ "$STATUS" = "healthy" ]; then
-                echo "MongoDB is healthy"
-                break
-              fi
-
-              sleep 2
-            done
-
-            STATUS=$(docker inspect --format='{{.State.Health.Status}}' namongodb-prod)
-
-            if [ "$STATUS" != "healthy" ]; then
-              echo "MongoDB healthcheck failed"
-              docker compose -f docker-compose-prod.yaml logs mongodb
-              exit 1
+            if [ "$STATUS" = "healthy" ]; then
+              echo "MongoDB is healthy"
+              break
             fi
 
-        - name: Wait for Product API
-          run: |
-            for i in {1..30}; do
-              echo "Checking Product API... attempt $i"
+            sleep 2
+          done
 
-              if curl -fsS http://localhost:3000/ > /dev/null 2>&1; then
-                echo "Product API is ready"
-                exit 0
-              fi
+          STATUS=$(docker inspect --format='{{.State.Health.Status}}' namongodb-prod)
 
-              docker compose -f docker-compose-prod.yaml ps
-              sleep 2
-            done
-
-            echo "Product API failed to start"
-            docker compose -f docker-compose-prod.yaml logs product-api
+          if [ "$STATUS" != "healthy" ]; then
+            echo "MongoDB healthcheck failed"
+            docker compose -f docker-compose-prod.yaml logs mongodb
             exit 1
+          fi
 
-        - name: CREATE product
-          run: |
-            curl -fsS -X POST http://localhost:3000/products \
-              -H "Content-Type: application/json" \
-              -d '{"pid":"CI001","pname":"CI Laptop","price":1500,"quantity":10}'
+      - name: Wait for Product API
+        run: |
+          for i in {1..30}; do
+            echo "Checking Product API... attempt $i"
 
-        - name: READ product
-          run: |
-            curl -fsS http://localhost:3000/products | grep "CI001"
-
-        - name: UPDATE product
-          run: |
-            curl -fsS -X PUT http://localhost:3000/products/CI001 \
-              -H "Content-Type: application/json" \
-              -d '{"quantity":20}' | grep '"quantity":20'
-
-        - name: DELETE product
-          run: |
-            curl -fsS -X DELETE http://localhost:3000/products/CI001
-
-        - name: Verify DELETE
-          run: |
-            RESPONSE=$(curl -fsS http://localhost:3000/products)
-
-            if echo "$RESPONSE" | grep -q "CI001"; then
-              echo "Product still exists"
-              exit 1
+            if curl -fsS http://localhost:3000/ > /dev/null 2>&1; then
+              echo "Product API is ready"
+              curl -fsS http://localhost:3000/
+              exit 0
             fi
 
-            echo "CRUD test passed"
+            docker compose -f docker-compose-prod.yaml ps
+            sleep 2
+          done
 
-        - name: Show logs on failure
-          if: failure()
-          run: docker compose -f docker-compose-prod.yaml logs
+          echo "Product API failed to start"
+          docker compose -f docker-compose-prod.yaml logs product-api
+          exit 1
 
-        - name: Stop containers
-          if: always()
-          run: docker compose -f docker-compose-prod.yaml down -v
+      - name: CREATE product
+        run: |
+          echo "Creating CI001..."
+
+          RESPONSE=$(curl -fsS -X POST http://localhost:3000/products \
+            -H "Content-Type: application/json" \
+            -d '{"pid":"CI001","pname":"CI Laptop","price":1500,"quantity":10}')
+
+          echo "Create response:"
+          echo "$RESPONSE"
+
+      - name: READ product
+        run: |
+          echo "Reading products..."
+
+          RESPONSE=$(curl -fsS http://localhost:3000/products)
+
+          echo "Products response:"
+          echo "$RESPONSE"
+
+          echo "$RESPONSE" | grep "CI001"
+
+      - name: UPDATE product
+        run: |
+          echo "Updating CI001..."
+
+          RESPONSE=$(curl -fsS -X PUT http://localhost:3000/products/CI001 \
+            -H "Content-Type: application/json" \
+            -d '{"quantity":20}')
+
+          echo "Update response:"
+          echo "$RESPONSE"
+
+          echo "$RESPONSE" | grep '"quantity":20'
+
+      - name: DELETE product
+        run: |
+          echo "Deleting CI001..."
+
+          RESPONSE=$(curl -fsS -X DELETE http://localhost:3000/products/CI001)
+
+          echo "Delete response:"
+          echo "$RESPONSE"
+
+      - name: Verify DELETE
+        run: |
+          echo "Checking that CI001 was deleted..."
+
+          RESPONSE=$(curl -fsS http://localhost:3000/products)
+
+          echo "Products after DELETE:"
+          echo "$RESPONSE"
+
+          if echo "$RESPONSE" | grep -q "CI001"; then
+            echo "Product still exists"
+            exit 1
+          fi
+
+          echo "CRUD test passed"
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker-compose-prod.yaml logs
+
+      - name: Stop containers
+        if: always()
+        run: |
+          docker compose -f docker-compose-prod.yaml down -v
