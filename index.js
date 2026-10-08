@@ -6,7 +6,10 @@ const app = express();
 
 app.use(express.json());
 
-// Kết nối MongoDB
+app.get("/", (req, res) => {
+  res.json({ message: "Product API is running" });
+});
+
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => {
@@ -16,7 +19,6 @@ mongoose
     console.error("MongoDB connection error:", err);
   });
 
-// Route Product
 const productRoutes = require("./product");
 app.use("/products", productRoutes);
 
