@@ -42,8 +42,13 @@ jobs:
           for i in {1..30}; do
             echo "Checking Product API... attempt $i"
 
-            if curl -fsS http://localhost:3000/ > /dev/null 2>&1; then
-              echo "Product API is ready"
+            STATUS=$(docker inspect --format='{{.State.Health.Status}}' product-api-prod 2>/dev/null || true)
+
+            echo "Container health: $STATUS"
+
+            if [ "$STATUS" = "healthy" ]; then
+              echo "Product API is healthy"
+              curl -fsS http://localhost:3000/
               exit 0
             fi
 
@@ -51,6 +56,15 @@ jobs:
             sleep 2
           done
 
-          echo "Product API failed to start"
+          echo "Product API failed healthcheck"
+
+          echo "===== Product API health details ====="
+          docker inspect --format='{{json .State.Health}}' product-api-prod
+
+          echo "===== Product API logs ====="
           docker compose -f docker-compose-prod.yaml logs product-api
+
+          echo "===== Direct HTTP test from runner ====="
+          curl -v http://localhost:3000/ || true
+
           exit 1
