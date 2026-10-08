@@ -31,7 +31,7 @@ jobs:
           docker pull ductien12123/product-api:latest
           docker image inspect ductien12123/product-api:latest
 
-      - name: Deploy to local Docker Engine
+      - name: Deploy Product API
         run: |
           docker compose -f docker-compose-prod.yaml pull product-api
           docker compose -f docker-compose-prod.yaml up -d --force-recreate
@@ -42,12 +42,8 @@ jobs:
           for i in {1..30}; do
             echo "Checking Product API... attempt $i"
 
-            STATUS=$(docker inspect --format='{{.State.Health.Status}}' product-api-prod 2>/dev/null || true)
-
-            echo "Container health: $STATUS"
-
-            if [ "$STATUS" = "healthy" ]; then
-              echo "Product API is healthy"
+            if curl -fsS http://localhost:3000/ > /dev/null 2>&1; then
+              echo "Product API is ready"
               curl -fsS http://localhost:3000/
               exit 0
             fi
@@ -56,15 +52,14 @@ jobs:
             sleep 2
           done
 
-          echo "Product API failed healthcheck"
-
-          echo "===== Product API health details ====="
-          docker inspect --format='{{json .State.Health}}' product-api-prod
-
-          echo "===== Product API logs ====="
+          echo "Product API failed to respond"
           docker compose -f docker-compose-prod.yaml logs product-api
-
-          echo "===== Direct HTTP test from runner ====="
-          curl -v http://localhost:3000/ || true
-
           exit 1
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose -f docker-compose-prod.yaml logs
+
+      - name: Stop containers
+        if: always()
+        run: docker compose -f docker-compose-prod.yaml down -v
